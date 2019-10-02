@@ -5,25 +5,16 @@ import Meetup from "../models/Meetup";
 
 class MeetupController {
   async index(req, res) {
-    const { page = 1 } = req.query;
-    const appointments = await Appointment.findAll({
-      where: { user_id: req.userId, canceled_at: null },
-      order: ["date"],
-      attributes: ["id", "date", "past", "cancelable"],
-      limit: 20,
-      offset: (page - 1) * 20,
+    const meetups = await Meetup.findAll({
+      where: { user_id: req.userId },
+      order: ["datetime"],
       include: {
         model: User,
-        as: "provider",
-        attributes: ["id", "name"],
-        include: {
-          model: File,
-          as: "avatar",
-          attributes: ["id", "path", "url"]
-        }
+        as: "user",
+        attributes: ["name"]
       }
     });
-    return res.json(appointments);
+    return res.json(meetups);
   }
 
   async store(req, res) {
@@ -40,11 +31,6 @@ class MeetupController {
     }
 
     const { title, description, location, banner, datetime } = req.body;
-
-    console.log(parseISO(datetime));
-    console.log(new Date());
-    console.log(isBefore(parseISO(datetime), new Date()));
-    console.log(req.userId);
 
     if (isBefore(parseISO(datetime), new Date())) {
       return res.status(400).json({ error: "Past dates are not permitted" });
@@ -70,35 +56,39 @@ class MeetupController {
       banner: Yup.string().required()
     });
 
-    const { id, user_id } = req.body;
+    const { id, datetime } = req.body;
 
-    const meetup = await Meetup.findByPk(id);
+    if (!id) {
+      return res.status(400).json({ error: "Meetups id is required" });
+    }
 
     if (!(await schema.isValid(req.body))) {
       return res.status(400).json({ error: "Validation fails" });
     }
 
+    if (isBefore(parseISO(datetime), new Date())) {
+      return res.status(400).json({ error: "Past dates are not permitted" });
+    }
+
     const userExists = await User.findOne({
-      where: { id: user_id }
+      where: { id: req.userId }
     });
 
     if (!userExists) {
       return res.status(400).json({ error: "User does not exists" });
     }
 
-    if (req.userId !== user_id) {
+    const meetup = await Meetup.findByPk(id);
+
+    if (req.userId !== meetup.user_id) {
       return res
         .status(400)
         .json({ error: "User is not administrator of this meetup" });
     }
 
-    const {
-      title,
-      description,
-      location,
-      datetime,
-      banner
-    } = await meetup.update(req.body);
+    const { title, description, location, banner } = await meetup.update(
+      req.body
+    );
 
     return res.json({ id, title, description, location, datetime, banner });
   }

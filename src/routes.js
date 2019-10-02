@@ -17,6 +17,8 @@ routes.post("/sessions", SessionController.store);
 
 routes.use(authMiddleware);
 
+routes.get("/meetups", MeetupController.index);
+
 routes.post("/meetups", MeetupController.store);
 
 routes.put("/users", UserController.update);
