@@ -1,20 +1,34 @@
 import * as Yup from "yup";
-import { parseISO, isBefore } from "date-fns";
+import { format, parseISO, isBefore } from "date-fns";
 import User from "../models/User";
 import Meetup from "../models/Meetup";
+import pt from "date-fns/locale/pt";
+import { Op } from "sequelize";
 
 class MeetupController {
   async index(req, res) {
+    const { page = 1, date } = req.query;
+
+    const formattedDate = format(parseISO(date), "yyyy-MM-dd");
     const meetups = await Meetup.findAll({
-      where: { user_id: req.userId },
+      where: {
+        user_id: req.userId
+      },
       order: ["datetime"],
+      limit: 10,
+      offset: (page - 1) * 10,
       include: {
         model: User,
         as: "user",
-        attributes: ["name"]
+        attributes: ["name", "email"]
       }
     });
-    return res.json(meetups);
+
+    const meetupsFiltered = meetups.filter(
+      meetup => format(meetup.datetime, "yyyy-MM-dd") === formattedDate
+    );
+
+    return res.json(meetupsFiltered);
   }
 
   async store(req, res) {
@@ -94,7 +108,31 @@ class MeetupController {
   }
 
   async delete(req, res) {
-    //
+    const meetup = await Meetup.findByPk(req.params.id, {
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["name"]
+        }
+      ]
+    });
+
+    if (meetup.user_id !== req.userId) {
+      return res
+        .status(401)
+        .json({ error: "You dont have permission to cancel this meetup" });
+    }
+
+    if (isBefore(meetup.datetime, new Date())) {
+      return res
+        .status(401)
+        .json({ error: "You can only cancel meetups that not happened" });
+    }
+
+    await meetup.destroy();
+
+    return res.json({ success: true });
   }
 }
 
